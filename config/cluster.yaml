@@ -1,0 +1,14 @@
+PCL_Clustering:
+    ros__parameters:
+      input_topic: "/velodyne_points" #[std::string]
+      
+      cluster_tolerance: 0.4 #[m] euclidean #[double]
+      min_cluster_size: 5 #[int]
+      max_cluster_size: 30000 #[int]
+      coloring_distance: 3.5 #[m] #[double]
+
+      voxel_resolution: 0.2 #[double] # must be smaller than cluster_tolerance
+      ground_thresh: 0.25 #[m] #[double]
+      sky_thresh: 2.50 # [m] #[double]
+
+      frame_id: "velodyne"
