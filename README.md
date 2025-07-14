@@ -1,9 +1,9 @@
-# PCL_Clustering
+# pcl_clustering
 
 cluster 3D points with PCL Library in ROS2
 
 - [Container Images](#container-images)
-- [PCL_Clustering](#PCL_Clustering)
+- [pcl_clustering](#pcl_clustering)
 
 
 ### Container Images
@@ -13,7 +13,7 @@ cluster 3D points with PCL Library in ROS2
 |  |  |  |
 
 
-## `PCL_Clustering`
+## `pcl_clustering`
 
 ### Subscribed Topics
 

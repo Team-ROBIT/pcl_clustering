@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(PCL_Clustering)
+project(pcl_clustering)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -9,25 +9,31 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(pcl REQUIRED)
 find_package(pcl_conversions REQUIRED)
 
-set(TARGET_NAME PCL_Clustering)
+find_package(PCL REQUIRED COMPONENTS common filters kdtree segmentation)
 
-add_executable(${TARGET_NAME} src/PCL_Clustering.cpp)
+set(TARGET_NAME pcl_clustering)
+
+add_executable(${TARGET_NAME} src/pcl_clustering.cpp)
 
 target_include_directories(${TARGET_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
+  ${PCL_INCLUDE_DIRS}
 )
+
 target_compile_features(${TARGET_NAME} PUBLIC c_std_99 cxx_std_17)
 
 ament_target_dependencies(${TARGET_NAME}
   rclcpp
   std_msgs
-  pcl_conversions
-  pcl
   sensor_msgs
+  pcl_conversions
+)
+
+target_link_libraries(${TARGET_NAME}
+  ${PCL_LIBRARIES}
 )
 
 install(TARGETS ${TARGET_NAME}

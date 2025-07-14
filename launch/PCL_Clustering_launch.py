@@ -11,36 +11,17 @@ from launch_ros.actions import Node, SetParameter
 
 def generate_launch_description():
 
-    remappable_topics = [
-        DeclareLaunchArgument("input_topic", default_value="~/input"),
-        DeclareLaunchArgument("output_topic", default_value="~/output"),
-    ]
+    pkg_path = get_package_share_directory('pcl_clustering')
+    param_file = os.path.join(pkg_path, 'config', 'cluster.yaml')
 
-    args = [
-        DeclareLaunchArgument("name", default_value="PCL_Clustering", description="node name"),
-        DeclareLaunchArgument("namespace", default_value="", description="node namespace"),
-        DeclareLaunchArgument("params", default_value=os.path.join(get_package_share_directory("PCL_Clustering"), "config", "params.yml"), description="path to parameter file"),
-        DeclareLaunchArgument("log_level", default_value="info", description="ROS logging level (debug, info, warn, error, fatal)"),
-        DeclareLaunchArgument("use_sim_time", default_value="false", description="use simulation clock"),
-        *remappable_topics,
-    ]
-
-    nodes = [
-        Node(
-            package="PCL_Clustering",
-            executable="PCL_Clustering",
-            namespace=LaunchConfiguration("namespace"),
-            name=LaunchConfiguration("name"),
-            parameters=[],
-            arguments=["--ros-args", "--log-level", LaunchConfiguration("log_level")],
-            remappings=[(la.default_value[0].text, LaunchConfiguration(la.name)) for la in remappable_topics],
-            output="screen",
-            emulate_tty=True,
-        )
-    ]
+    pcl_clustering_node = Node(
+        package='pcl_clustering',            
+        executable='pcl_clustering',         
+        name='pcl_clustering',               
+        output='screen',
+        parameters=[param_file],
+    )
 
     return LaunchDescription([
-        *args,
-        SetParameter("use_sim_time", LaunchConfiguration("use_sim_time")),
-        *nodes,
+        pcl_clustering_node,
     ])

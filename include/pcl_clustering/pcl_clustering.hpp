@@ -1,35 +1,28 @@
 #pragma once
 
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/kdtree/kdtree.h>
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/segmentation/extract_clusters.h>
+#include <pcl_conversions/pcl_conversions.h>
+
 #include <memory>
+#include <rclcpp/rclcpp.hpp>
+#include <sensor_msgs/msg/point_cloud2.hpp>
 #include <string>
 #include <vector>
 
-#include <rclcpp/rclcpp.hpp>
-#include <sensor_msgs/msg/point_cloud2.hpp>
-
-#include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
-#include <pcl_conversions/pcl_conversions.h>
-
-#include <pcl/filters/voxel_grid.h>
-#include <pcl/kdtree/kdtree.h>
-#include <pcl/segmentation/extract_clusters.h>
-
-
-namespace PCL_Clustering {
-
-
+namespace pcl_clustering {
 
 class Pcl_Clustering : public rclcpp::Node {
-
  public:
-
   Pcl_Clustering();
   void setup();
   void clustering();
   void pub_cluster();
- private:
 
+ private:
   void PCL_Callback(const sensor_msgs::msg::PointCloud2::ConstSharedPtr& msg);
 
   std::string input_topic;
@@ -49,5 +42,4 @@ class Pcl_Clustering : public rclcpp::Node {
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr cluster_pub;
 };
 
-
-}
+}  // namespace pcl_clustering
