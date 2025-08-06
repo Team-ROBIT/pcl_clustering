@@ -13,6 +13,7 @@ Pcl_Clustering::Pcl_Clustering() : Node("pcl_clustering") {
   this->declare_parameter<double>("ground_thresh", 0.0);
   this->declare_parameter<double>("sky_thresh", 0.0);
   this->declare_parameter<std::string>("frame_id", "velodyne");
+  setup();
 }
 
 void Pcl_Clustering::setup() {
@@ -148,9 +149,9 @@ int main(int argc, char* argv[]) {
   rclcpp::Rate rate(30);
   auto clustering_node = std::make_shared<pcl_clustering::Pcl_Clustering>();
   RCLCPP_INFO(clustering_node->get_logger(), "start");
-  rclcpp::spin_some(clustering_node);
-  RCLCPP_INFO(clustering_node->get_logger(), "setup");
-  clustering_node->setup();
+  //rclcpp::spin_some(clustering_node);
+  // RCLCPP_INFO(clustering_node->get_logger(), "setup");
+  // clustering_node->setup();
 
   while (rclcpp::ok()) {
     rclcpp::spin_some(clustering_node);
