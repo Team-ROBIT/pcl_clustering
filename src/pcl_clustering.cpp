@@ -13,13 +13,15 @@ Pcl_Clustering::Pcl_Clustering() : Node("pcl_clustering") {
   this->declare_parameter<double>("ground_thresh", 0.0);
   this->declare_parameter<double>("sky_thresh", 0.0);
   this->declare_parameter<std::string>("frame_id", "velodyne");
+  this->declare_parameter<std::vector<double>>("cam_intrinsic",
+                                               {1.0, 2.0, 3.0, 4.0});
   setup();
 }
 
 void Pcl_Clustering::setup() {
   // parameters
   this->get_parameter("input_topic", input_topic);
-  this->get_parameter("cluster_tolerance", cluster_tolerance);  
+  this->get_parameter("cluster_tolerance", cluster_tolerance);
   RCLCPP_INFO(this->get_logger(), "coloring_distance: %.2f", coloring_distance);
   this->get_parameter("coloring_distance", coloring_distance);
   RCLCPP_INFO(this->get_logger(), "coloring_distance: %.2f", coloring_distance);
@@ -29,6 +31,8 @@ void Pcl_Clustering::setup() {
   this->get_parameter("min_cluster_size", min_cluster_size);
   this->get_parameter("max_cluster_size", max_cluster_size);
   this->get_parameter("frame_id", frame_id);
+  this->get_parameter("cam_intrinsic", cam_intrinsic);
+
   RCLCPP_INFO(this->get_logger(), "input_topic: %s", input_topic.c_str());
   RCLCPP_INFO(this->get_logger(), "cluster_tolerance: %.2f", cluster_tolerance);
   RCLCPP_INFO(this->get_logger(), "coloring_distance: %.2f", coloring_distance);
@@ -38,17 +42,36 @@ void Pcl_Clustering::setup() {
   RCLCPP_INFO(this->get_logger(), "min_cluster_size: %d", min_cluster_size);
   RCLCPP_INFO(this->get_logger(), "max_cluster_size: %d", max_cluster_size);
   RCLCPP_INFO(this->get_logger(), "frame_id: %s", frame_id.c_str());
+  RCLCPP_INFO(this->get_logger(), "cam_intrinsic: [%f, %f, %f, %f]",
+              cam_intrinsic[0], cam_intrinsic[1], cam_intrinsic[2],
+              cam_intrinsic[3]);
 
-  // sub pub
+  // sub
   pcl_sub = this->create_subscription<sensor_msgs::msg::PointCloud2>(
       input_topic, 10,
       std::bind(&Pcl_Clustering::PCL_Callback, this, std::placeholders::_1));
+  master_sub = this->create_subscription<base_msgs::msg::MissionStatus>(
+      "/robot_master/mission_status", 10,
+      std::bind(&Pcl_Clustering::master_cb, this, std::placeholders::_1));
+  vision_sub = this->create_subscription<std_msgs::msg::Float32MultiArray>(
+      "/defense_red_defense/red_cloth_detect", 10,
+      std::bind(&Pcl_Clustering::vision_cb, this, std::placeholders::_1));
+  // pub
   cluster_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>(
       "/cluster_points", 10);
+  master_pub = this->create_publisher<std_msgs::msg::Float32MultiArray>(
+      "/follow_move", 10);
 
   // initial setting
   filt_voxel = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-  colored_cluster = std::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
+  // colored_cluster = std::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
+
+  vision_msg.data.clear();
+  master_msg.auto_operation = 0;
+  master_msg.mode.data = " ";
+  master_msg.mission.data = " ";
+  master_msg.mani_en = 0;
+  master_msg.lidar_en = 0;
 }
 
 void Pcl_Clustering::PCL_Callback(
@@ -76,11 +99,74 @@ void Pcl_Clustering::PCL_Callback(
   filt_voxel->is_dense = true;
 }
 
+void Pcl_Clustering::vision_cb(
+    const std_msgs::msg::Float32MultiArray::ConstSharedPtr& msg) {
+  if (msg->data[0] == 0.0 && msg->data[1] == 0.0) {
+    check_none = true;
+  } else {
+    check_none = false;
+  }
+  vision_msg.data.clear();
+  vision_msg = *msg;
+}
+
+void Pcl_Clustering::master_cb(
+    const base_msgs::msg::MissionStatus::ConstSharedPtr& msg) {
+  master_msg = *msg;
+}
+
+void Pcl_Clustering::match_point() {
+  if (check_none) {
+    std_msgs::msg::Float32MultiArray pub_msg;
+    pub_msg.data.push_back(0.0);
+    pub_msg.data.push_back(-1.0);
+
+    master_pub->publish(pub_msg);
+    return;
+  }
+  if (vision_msg.data.empty()) {
+    RCLCPP_INFO(this->get_logger(), "vision_data is empty");
+    return;
+  }
+
+  double du = vision_msg.data[0] - cam_intrinsic[2];  // 중심점 기준 X 오프셋
+  double dv = vision_msg.data[1] - cam_intrinsic[3];  // 중심점 기준 Y 오프셋
+
+  theta_h = std::atan2(du, cam_intrinsic[0]);  // 수평각
+  theta_v = std::atan2(dv, cam_intrinsic[1]);  // 수직각
+
+  clustering();
+
+  float min_dist = std::numeric_limits<float>::max();
+  int min_angle_h = 0;
+  for (size_t i = 0; i < cluster_centroids.size(); i++) {
+    auto [point, angle_h, angle_v, dist] = cluster_centroids[i];
+    float dh = theta_h - angle_h;
+    float dv = theta_v - angle_v;
+    float distP = std::sqrt(dh * dh + dv * dv);  // 각도 공간에서 거리
+    if (distP < min_dist) {
+      min_dist = distP;
+      min_angle_h = angle_h;
+    }
+  }
+
+  std_msgs::msg::Float32MultiArray pub_msg;
+  pub_msg.data.push_back(min_angle_h);
+  pub_msg.data.push_back(min_dist);
+
+  master_pub->publish(pub_msg);
+}
+
 void Pcl_Clustering::clustering() {
+  float angle_h = 0.0;
+  float angle_v = 0.0;
+  float dist = 0.0;
+
   // clustering with kdtree
   pcl::search::KdTree<pcl::PointXYZ>::Ptr kdtree(
       new pcl::search::KdTree<pcl::PointXYZ>());
   kdtree->setInputCloud(filt_voxel);
+  RCLCPP_INFO(this->get_logger(), "kdtree");
 
   std::vector<pcl::PointIndices> cluster_indices;
   pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
@@ -90,10 +176,11 @@ void Pcl_Clustering::clustering() {
   ec.setSearchMethod(kdtree);
   ec.setInputCloud(filt_voxel);
   ec.extract(cluster_indices);
+  RCLCPP_INFO(this->get_logger(), "cluster_indices");
 
   // calc centroid , and coloring objs under distance
   cluster_centroids.clear();
-  colored_cluster->clear();
+  RCLCPP_INFO(this->get_logger(), "cluster_centroids");
 
   for (const auto& indices : cluster_indices) {
     // calc centroid
@@ -105,42 +192,30 @@ void Pcl_Clustering::clustering() {
       y_sum += pt.y;
       z_sum += pt.z;
     }
-    pcl::PointXYZ centroid{x_sum / n, y_sum / n, z_sum / n};
-    cluster_centroids.push_back(centroid);
 
-    double dist = std::sqrt(centroid.x * centroid.x + centroid.y * centroid.y +
-                            centroid.z * centroid.z);
-    uint8_t r, g, b;
-    if (dist < coloring_distance) {
-      r = 255;
-      g = 0;
-      b = 0;
-    } else {
-      r = 0;
-      g = 0;
-      b = 255;
-    }
-    for (int idx : indices.indices) {
-      const auto& pt = filt_voxel->points[idx];
-      pcl::PointXYZRGB pt_rgb;
-      pt_rgb.x = pt.x;
-      pt_rgb.y = pt.y;
-      pt_rgb.z = pt.z;
-      pt_rgb.r = r;
-      pt_rgb.g = g;
-      pt_rgb.b = b;
-      colored_cluster->points.push_back(pt_rgb);
-    }
+    float pt_x = x_sum / n;
+    float pt_y = y_sum / n;
+    float pt_z = z_sum / n;
+
+    pcl::PointXYZ centroid{pt_x, pt_y, pt_z};
+    angle_h = std::atan2(pt_y, pt_x);
+    angle_v = std::atan2(pt_z, std::sqrt(pt_x * pt_x + pt_y * pt_y));
+
+    dist = std::sqrt(centroid.x * centroid.x + centroid.y * centroid.y +
+                     centroid.z * centroid.z);
+
+    cluster_centroids.push_back(
+        std::make_tuple(centroid, angle_h, angle_v, dist));
   }
 }
 
-void Pcl_Clustering::pub_cluster() {
-  sensor_msgs::msg::PointCloud2 cluster_msg;
-  pcl::toROSMsg(*colored_cluster, cluster_msg);
-  cluster_msg.header.frame_id = frame_id;
-  cluster_msg.header.stamp = this->get_clock()->now();
-  cluster_pub->publish(cluster_msg);
-}
+// void Pcl_Clustering::pub_cluster() {
+//   sensor_msgs::msg::PointCloud2 cluster_msg;
+//   pcl::toROSMsg(*colored_cluster, cluster_msg);
+//   cluster_msg.header.frame_id = frame_id;
+//   cluster_msg.header.stamp = this->get_clock()->now();
+//   cluster_pub->publish(cluster_msg);
+// }
 
 }  // namespace pcl_clustering
 
@@ -149,16 +224,18 @@ int main(int argc, char* argv[]) {
   rclcpp::Rate rate(30);
   auto clustering_node = std::make_shared<pcl_clustering::Pcl_Clustering>();
   RCLCPP_INFO(clustering_node->get_logger(), "start");
-  //rclcpp::spin_some(clustering_node);
-  // RCLCPP_INFO(clustering_node->get_logger(), "setup");
-  // clustering_node->setup();
+  // rclcpp::spin_some(clustering_node);
+  //  RCLCPP_INFO(clustering_node->get_logger(), "setup");
+  //  clustering_node->setup();
 
   while (rclcpp::ok()) {
     rclcpp::spin_some(clustering_node);
-    clustering_node->clustering();
-    clustering_node->pub_cluster();
+
+    clustering_node->match_point();
+
     rate.sleep();
   }
+
   rclcpp::shutdown();
   return 0;
 }

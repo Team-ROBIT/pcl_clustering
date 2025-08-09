@@ -10,6 +10,7 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(pcl_conversions REQUIRED)
+find_package(base_msgs REQUIRED)
 
 find_package(PCL REQUIRED COMPONENTS common filters kdtree segmentation)
 
@@ -30,6 +31,7 @@ ament_target_dependencies(${TARGET_NAME}
   std_msgs
   sensor_msgs
   pcl_conversions
+  base_msgs
 )
 
 target_link_libraries(${TARGET_NAME}

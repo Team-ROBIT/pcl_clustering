@@ -11,4 +11,7 @@ pcl_clustering:
       ground_thresh: 0.25 #[m] #[double]
       sky_thresh: 2.50 # [m] #[double]
 
+      #Camera parameters
+      cam_intrinsic: [0.0,0.0,0.0,0.0] # fx, fy, cx, cy
+
       frame_id: "velodyne"
