@@ -7,11 +7,11 @@
 #include <pcl/segmentation/extract_clusters.h>
 #include <pcl_conversions/pcl_conversions.h>
 
+#include <cmath>
 #include <memory>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <string>
-#include <cmath>
 #include <vector>
 
 #include "base_msgs/msg/mission_status.hpp"
@@ -24,7 +24,7 @@ class Pcl_Clustering : public rclcpp::Node {
   Pcl_Clustering();
   void setup();
   void clustering();
-  //void pub_cluster();
+  void pub_cluster();
   void match_point();
 
  private:
@@ -32,7 +32,7 @@ class Pcl_Clustering : public rclcpp::Node {
   void master_cb(const base_msgs::msg::MissionStatus::ConstSharedPtr& msg);
   void vision_cb(const std_msgs::msg::Float32MultiArray::ConstSharedPtr& msg);
   void pub_master();
-
+  void coloring_points(int clust_id);
   // cluster
   std::string input_topic;
   double cluster_tolerance;
@@ -46,16 +46,16 @@ class Pcl_Clustering : public rclcpp::Node {
 
   // defense
   std::vector<double> cam_intrinsic;
-  double theta_h = 0, theta_v = 0;
+  //double theta_h = 0, theta_v = 0;
   base_msgs::msg::MissionStatus master_msg;
   std_msgs::msg::Float32MultiArray vision_msg;
-  bool check_none=false;
+  bool check_none = false;
 
   //
   pcl::PointCloud<pcl::PointXYZ>::Ptr filt_voxel;
-  //std::vector<pcl::PointXYZ> cluster_centroids;
-  std::vector<std::tuple<pcl::PointXYZ, float, float, float>> cluster_centroids; //centroid, angle_h, angle_v, dist
-  //pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cluster;
+  std::vector<std::tuple<pcl::PointXYZ, float, float, float, int>>
+      cluster_centroids;  // centroid, angle_h, angle_v, dist
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr colored_cluster;
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pcl_sub;
   rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr cluster_pub;
 

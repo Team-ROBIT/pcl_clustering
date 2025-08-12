@@ -54,7 +54,7 @@ void Pcl_Clustering::setup() {
       "/robot_master/mission_status", 10,
       std::bind(&Pcl_Clustering::master_cb, this, std::placeholders::_1));
   vision_sub = this->create_subscription<std_msgs::msg::Float32MultiArray>(
-      "/defense_red_defense/red_cloth_detect", 10,
+      "/cam_object_info", 10,
       std::bind(&Pcl_Clustering::vision_cb, this, std::placeholders::_1));
   // pub
   cluster_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>(
@@ -64,7 +64,7 @@ void Pcl_Clustering::setup() {
 
   // initial setting
   filt_voxel = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
-  // colored_cluster = std::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
+  colored_cluster = std::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
 
   vision_msg.data.clear();
   master_msg.auto_operation = 0;
@@ -101,7 +101,7 @@ void Pcl_Clustering::PCL_Callback(
 
 void Pcl_Clustering::vision_cb(
     const std_msgs::msg::Float32MultiArray::ConstSharedPtr& msg) {
-  if (msg->data[0] == 0.0 && msg->data[1] == 0.0) {
+  if (msg->data[2] == 0.0 && msg->data[3] == 0.0) {
     check_none = true;
   } else {
     check_none = false;
@@ -129,44 +129,66 @@ void Pcl_Clustering::match_point() {
     return;
   }
 
-  double du = vision_msg.data[0] - cam_intrinsic[2];  // 중심점 기준 X 오프셋
-  double dv = vision_msg.data[1] - cam_intrinsic[3];  // 중심점 기준 Y 오프셋
+  double du = vision_msg.data[2]; // - cam_intrinsic[2];  // 중심점 기준 X 오프셋
+  double dv = vision_msg.data[3]; // - cam_intrinsic[3];  // 중심점 기준 Y 오프셋
 
-  theta_h = std::atan2(du, cam_intrinsic[0]);  // 수평각
-  theta_v = std::atan2(dv, cam_intrinsic[1]);  // 수직각
+  double theta_h = -std::atan2(du, cam_intrinsic[0]);  // 수평각 // 라이다, 카메라 좌우반대라 -
+  double theta_v = std::atan2(dv, cam_intrinsic[1]);  // 수직각
 
   clustering();
 
+  int clust_id = 999999;
   float min_dist = std::numeric_limits<float>::max();
-  int min_angle_h = 0;
+  float min_angle_h = 0.0;
+  float min_real_dist;
   for (size_t i = 0; i < cluster_centroids.size(); i++) {
-    auto [point, angle_h, angle_v, dist] = cluster_centroids[i];
+    auto [point, angle_h, angle_v, dist, id] = cluster_centroids[i];
     float dh = theta_h - angle_h;
     float dv = theta_v - angle_v;
     float distP = std::sqrt(dh * dh + dv * dv);  // 각도 공간에서 거리
-    if (distP < min_dist) {
+    if (distP < min_dist && dist< 6) { // 각공간이 제일 가까우면서도 중심거리가 6미터 이내인 클러스터만
       min_dist = distP;
-      min_angle_h = angle_h;
+      min_real_dist = dist;  // 가장가까운각을 가진 점의 거리값
+      min_angle_h = angle_h * 180 / 3.141592;
+      clust_id = id;
     }
   }
+  theta_h = theta_h * 180 / 3.141592;
+  std::cout << "theta_h : " << theta_h << std::endl;
+  coloring_points(clust_id);
 
   std_msgs::msg::Float32MultiArray pub_msg;
   pub_msg.data.push_back(min_angle_h);
-  pub_msg.data.push_back(min_dist);
+  pub_msg.data.push_back(min_real_dist);
 
   master_pub->publish(pub_msg);
+  pub_cluster();
+}
+
+void Pcl_Clustering::coloring_points(int clust_id) {
+  for (size_t a = 0; a < colored_cluster->points.size(); a++) {
+    if (colored_cluster->points[a].r == clust_id) {
+      colored_cluster->points[a].r = 255;
+      colored_cluster->points[a].g = 0;
+      colored_cluster->points[a].b = 0;
+    } else {
+      colored_cluster->points[a].r = 255;
+      colored_cluster->points[a].g = 255;
+      colored_cluster->points[a].b = 255;
+    }
+  }
 }
 
 void Pcl_Clustering::clustering() {
   float angle_h = 0.0;
   float angle_v = 0.0;
   float dist = 0.0;
+  colored_cluster->points.clear();
 
   // clustering with kdtree
   pcl::search::KdTree<pcl::PointXYZ>::Ptr kdtree(
       new pcl::search::KdTree<pcl::PointXYZ>());
   kdtree->setInputCloud(filt_voxel);
-  RCLCPP_INFO(this->get_logger(), "kdtree");
 
   std::vector<pcl::PointIndices> cluster_indices;
   pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
@@ -176,12 +198,10 @@ void Pcl_Clustering::clustering() {
   ec.setSearchMethod(kdtree);
   ec.setInputCloud(filt_voxel);
   ec.extract(cluster_indices);
-  RCLCPP_INFO(this->get_logger(), "cluster_indices");
 
   // calc centroid , and coloring objs under distance
   cluster_centroids.clear();
-  RCLCPP_INFO(this->get_logger(), "cluster_centroids");
-
+  int cluster_id = 0;
   for (const auto& indices : cluster_indices) {
     // calc centroid
     float x_sum = 0, y_sum = 0, z_sum = 0;
@@ -192,7 +212,19 @@ void Pcl_Clustering::clustering() {
       y_sum += pt.y;
       z_sum += pt.z;
     }
+    for (int idx : indices.indices) {
+      pcl::PointXYZRGB pt_rgb;
+      pt_rgb.x = filt_voxel->points[idx].x;
+      pt_rgb.y = filt_voxel->points[idx].y;
+      pt_rgb.z = filt_voxel->points[idx].z;
 
+      // 예: cluster_id에 따라 색 지정
+      pt_rgb.r = cluster_id;
+      pt_rgb.g = cluster_id;
+      pt_rgb.b = cluster_id;
+
+      colored_cluster->points.push_back(pt_rgb);
+    }
     float pt_x = x_sum / n;
     float pt_y = y_sum / n;
     float pt_z = z_sum / n;
@@ -205,17 +237,19 @@ void Pcl_Clustering::clustering() {
                      centroid.z * centroid.z);
 
     cluster_centroids.push_back(
-        std::make_tuple(centroid, angle_h, angle_v, dist));
+        std::make_tuple(centroid, angle_h, angle_v, dist, cluster_id));
+
+    cluster_id++;
   }
 }
 
-// void Pcl_Clustering::pub_cluster() {
-//   sensor_msgs::msg::PointCloud2 cluster_msg;
-//   pcl::toROSMsg(*colored_cluster, cluster_msg);
-//   cluster_msg.header.frame_id = frame_id;
-//   cluster_msg.header.stamp = this->get_clock()->now();
-//   cluster_pub->publish(cluster_msg);
-// }
+void Pcl_Clustering::pub_cluster() {
+  sensor_msgs::msg::PointCloud2 cluster_msg;
+  pcl::toROSMsg(*colored_cluster, cluster_msg);
+  cluster_msg.header.frame_id = frame_id;
+  cluster_msg.header.stamp = this->get_clock()->now();
+  cluster_pub->publish(cluster_msg);
+}
 
 }  // namespace pcl_clustering
 

@@ -7,11 +7,11 @@ pcl_clustering:
       max_cluster_size: 30000 #[int]
       coloring_distance: 3.0 #[m] #[double]
 
-      voxel_resolution: 0.2 #[double] # must be smaller than cluster_tolerance
+      voxel_resolution: 0.1 #[double] # must be smaller than cluster_tolerance
       ground_thresh: 0.25 #[m] #[double]
       sky_thresh: 2.50 # [m] #[double]
 
       #Camera parameters
-      cam_intrinsic: [0.0,0.0,0.0,0.0] # fx, fy, cx, cy
+      cam_intrinsic: [604.87371826,604.30657959,326.90826416,251.72581482] # fx, fy, cx, cy
 
       frame_id: "velodyne"
