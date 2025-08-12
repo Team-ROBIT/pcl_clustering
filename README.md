@@ -1,6 +1,11 @@
 # pcl_clustering
 
 cluster 3D points with PCL Library in ROS2
+++
+
+- for robit-defense-25 robot following mission
+  : get vision-labeled img to find nearest cluster under 6m, and return its center distance.
+
 
 ## Development Environment
 
