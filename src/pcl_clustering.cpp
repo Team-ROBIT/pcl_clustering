@@ -60,7 +60,7 @@ void Pcl_Clustering::setup() {
   cluster_pub = this->create_publisher<sensor_msgs::msg::PointCloud2>(
       "/cluster_points", 10);
   master_pub = this->create_publisher<std_msgs::msg::Float32MultiArray>(
-      "/follow_move", 10);
+      "/follow_data", 10);
 
   // initial setting
   filt_voxel = std::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
@@ -119,13 +119,15 @@ void Pcl_Clustering::match_point() {
   if (check_none) {
     std_msgs::msg::Float32MultiArray pub_msg;
     pub_msg.data.push_back(0.0);
-    pub_msg.data.push_back(-1.0);
+    pub_msg.data.push_back(0.5); //인식안되면 천천히 전진
+    //pub_msg.data.push_back(2.0); //정지
 
     master_pub->publish(pub_msg);
     return;
   }
   if (vision_msg.data.empty()) {
-    RCLCPP_INFO(this->get_logger(), "vision_data is empty");
+    
+    //RCLCPP_INFO(this->get_logger(), "vision_data is empty");
     return;
   }
 
@@ -146,7 +148,7 @@ void Pcl_Clustering::match_point() {
     float dh = theta_h - angle_h;
     float dv = theta_v - angle_v;
     float distP = std::sqrt(dh * dh + dv * dv);  // 각도 공간에서 거리
-    if (distP < min_dist && dist< 6) { // 각공간이 제일 가까우면서도 중심거리가 6미터 이내인 클러스터만
+    if (distP < min_dist && dist<3) { // 각공간이 제일 가까우면서도 중심거리가 6미터 이내인 클러스터만
       min_dist = distP;
       min_real_dist = dist;  // 가장가까운각을 가진 점의 거리값
       min_angle_h = angle_h * 180 / 3.141592;
