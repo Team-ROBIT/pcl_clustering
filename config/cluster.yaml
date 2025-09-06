@@ -3,7 +3,7 @@ pcl_clustering:
       input_topic: "/velodyne_points" #[std::string]
       
       cluster_tolerance: 0.25 #[m] euclidean #[double]
-      min_cluster_size: 5 #[int]
+      min_cluster_size: 4 #[int]
       max_cluster_size: 30000 #[int]
       coloring_distance: 3.0 #[m] #[double]
 

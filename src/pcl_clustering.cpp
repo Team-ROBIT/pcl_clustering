@@ -51,7 +51,7 @@ void Pcl_Clustering::setup() {
       input_topic, 10,
       std::bind(&Pcl_Clustering::PCL_Callback, this, std::placeholders::_1));
   master_sub = this->create_subscription<base_msgs::msg::MissionStatus>(
-      "/robot_master/mission_status", 10,
+      "/mission_status_from_master", 10,
       std::bind(&Pcl_Clustering::master_cb, this, std::placeholders::_1));
   vision_sub = this->create_subscription<std_msgs::msg::Float32MultiArray>(
       "/cam_object_info", 10,
@@ -119,7 +119,7 @@ void Pcl_Clustering::match_point() {
   if (check_none) {
     std_msgs::msg::Float32MultiArray pub_msg;
     pub_msg.data.push_back(0.0);
-    pub_msg.data.push_back(0.5); //인식안되면 천천히 전진
+    pub_msg.data.push_back(2.5); //인식안되면 천천히 전진
     //pub_msg.data.push_back(2.0); //정지
 
     master_pub->publish(pub_msg);
@@ -148,7 +148,7 @@ void Pcl_Clustering::match_point() {
     float dh = theta_h - angle_h;
     float dv = theta_v - angle_v;
     float distP = std::sqrt(dh * dh + dv * dv);  // 각도 공간에서 거리
-    if (distP < min_dist && dist<3) { // 각공간이 제일 가까우면서도 중심거리가 6미터 이내인 클러스터만
+    if (distP < min_dist && dist<5) { // 각공간이 제일 가까우면서도 중심거리가 5미터 이내인 클러스터만
       min_dist = distP;
       min_real_dist = dist;  // 가장가까운각을 가진 점의 거리값
       min_angle_h = angle_h * 180 / 3.141592;
